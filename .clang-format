@@ -2,3 +2,5 @@ BasedOnStyle: LLVM
 IndentCaseLabels: true
 BreakBeforeBraces: Allman
 AllowShortFunctionsOnASingleLine: None
+SeparateDefinitionBlocks: Always
+MaxEmptyLinesToKeep: 2
