@@ -23,21 +23,44 @@ global_variable int BitmapWidth;
 global_variable int BitmapHeight;
 global_variable int BytesPerPixel = 4;
 
-internal_function void RenderWeirdGradient(int XOffset, int YOffset)
+internal_function void RenderWeirdGradient1(int XOffset, int YOffset)
 {
   int Width = BitmapWidth;
   int Height = BitmapHeight;
 
   uint8 *Row = (uint8 *)BitmapMemory;
-  uint32 *Pixel = (uint32 *)BitmapMemory;
   int Pitch = Width * BytesPerPixel;
   for (int Y = 0; Y < Height; ++Y)
   {
+
+    uint32 *Pixel = (uint32 *)Row;
     for (int X = 0; X < Width; ++X)
     {
       uint8 Red = X + XOffset;
       uint8 Blue = Y + YOffset;
       *Pixel++ = (Blue << 16) | Red;
+    }
+    Row += Pitch;
+  }
+}
+
+internal_function void RenderWeirdGradient2(int XOffset, int YOffset)
+{
+  int Width = BitmapWidth;
+  int Height = BitmapHeight;
+
+  uint8 *Row = (uint8 *)BitmapMemory;
+  int Pitch = BytesPerPixel * Width;
+  for (int Y = 0; Y < Height; Y++)
+  {
+
+    uint32 *Pixel = (uint32 *)Row;
+    for (int X = 0; X < Width; X++)
+    {
+      uint8 Green = 0;
+      uint8 Blue = Y + YOffset;
+      uint8 Red = X + XOffset;
+      *Pixel++ = Blue | (Green << 8) | (Red << 16);
     }
     Row += Pitch;
   }
@@ -63,7 +86,7 @@ internal_function void Win32ResizeDIBSection(int Width, int Height)
   int BitmapMemorySize = (Width * Height) * BytesPerPixel;
   BitmapMemory = VirtualAlloc(0, BitmapMemorySize, MEM_RESERVE | MEM_COMMIT,
                               PAGE_READWRITE);
-  RenderWeirdGradient(Width, Height);
+  RenderWeirdGradient1(Width, Height);
 }
 
 internal_function void Win32UpdateWindow(HDC DeviceContext, RECT *ClientRect)
@@ -176,10 +199,11 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
         RECT ClientRect;
         HDC DeviceContext = GetDC(Window);
         GetClientRect(Window, &ClientRect);
-        RenderWeirdGradient(XOffset, YOffset);
+        RenderWeirdGradient2(XOffset, YOffset);
         Win32UpdateWindow(DeviceContext, &ClientRect);
         ReleaseDC(Window, DeviceContext);
         ++XOffset;
+        ++YOffset;
       }
     }
     else
