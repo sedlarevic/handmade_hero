@@ -35,9 +35,9 @@ internal_function void RenderWeirdGradient(int XOffset, int YOffset)
   {
     for (int X = 0; X < Width; ++X)
     {
-        uint8 Red = X + XOffset;
-        uint8 Blue = Y + YOffset;
-        *Pixel++ = (Blue << 16) | Red;  
+      uint8 Red = X + XOffset;
+      uint8 Blue = Y + YOffset;
+      *Pixel++ = (Blue << 16) | Red;
     }
     Row += Pitch;
   }
@@ -170,17 +170,16 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
           {
             Running = false;
           }
-
           TranslateMessage(&Message);
           DispatchMessage(&Message);
-          RECT ClientRect;
-          HDC DeviceContext = GetDC(Window);
-          GetClientRect(Window, &ClientRect);
-          RenderWeirdGradient(XOffset, YOffset);
-          Win32UpdateWindow(DeviceContext, &ClientRect);
-          ReleaseDC(Window, DeviceContext);
-          ++XOffset;
         }
+        RECT ClientRect;
+        HDC DeviceContext = GetDC(Window);
+        GetClientRect(Window, &ClientRect);
+        RenderWeirdGradient(XOffset, YOffset);
+        Win32UpdateWindow(DeviceContext, &ClientRect);
+        ReleaseDC(Window, DeviceContext);
+        ++XOffset;
       }
     }
     else
