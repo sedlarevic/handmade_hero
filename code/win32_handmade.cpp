@@ -190,7 +190,7 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
                      LPSTR LpCmdLine, int NShowCmd)
 {
   WNDCLASS WindowClass = {};
-  WindowClass.style = CS_VREDRAW | CS_HREDRAW;
+  WindowClass.style = CS_VREDRAW | CS_HREDRAW | CS_OWNDC;
   WindowClass.lpfnWndProc = Win32MainWindowCallback;
   WindowClass.hInstance = Instance;
   WindowClass.lpszClassName = "HandmadeHeroWindowClass";
