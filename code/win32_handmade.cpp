@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <windows.h>
+#include <xinput.h>
 
 #define internal_function static
 #define local_persist static
@@ -37,7 +38,7 @@ struct win32_window_dimension
 };
 
 global_variable win32_offscreen_buffer GlobalBackBuffer;
-global_variable bool Running;
+global_variable bool GlobalRunning;
 
 internal_function void RenderWeirdGradient1(win32_offscreen_buffer *Buffer,
                                             int XOffset, int YOffset)
@@ -140,12 +141,72 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND Window, UINT Message,
   switch (Message)
   {
 
-
-    case WM_CLOSE:
+    case WM_SYSKEYUP:
+    case WM_SYSKEYDOWN:
+    case WM_KEYDOWN:
+    case WM_KEYUP:
     {
-      OutputDebugStringA("WM_CLOSE\n");
-      // TODO: Will be changed later. Handle as a message to the user?
-      Running = false;
+      uint32 VKCode = WParam;
+      bool wasDown = ((LParam & (1 << 30)) != 0);
+      bool isDown = ((LParam & (1 << 31)) == 0);
+      if (wasDown != isDown)
+      {
+        if (VKCode == 'W')
+        {
+          OutputDebugStringA("W\n");
+        }
+
+        else if (VKCode == 'A')
+        {
+
+          OutputDebugStringA("A\n");
+        }
+        else if (VKCode == 'S')
+        {
+
+          OutputDebugStringA("S\n");
+        }
+        else if (VKCode == 'D')
+        {
+
+          OutputDebugStringA("D\n");
+        }
+        else if (VKCode == VK_UP)
+        {
+          OutputDebugStringA("UP\n");
+        }
+        else if (VKCode == VK_DOWN)
+        {
+
+          OutputDebugStringA("DOWN\n");
+        }
+        else if (VKCode == VK_LEFT)
+        {
+
+          OutputDebugStringA("LEFT\n");
+        }
+        else if (VKCode == VK_RIGHT)
+        {
+
+          OutputDebugStringA("RIGHT\n");
+        }
+        else if (VKCode == VK_ESCAPE)
+        {
+          OutputDebugStringA("ESCAPE\n");
+        }
+        else if (VKCode == VK_SPACE)
+        {
+          OutputDebugStringA("SPACE\n");
+        }
+        if (wasDown)
+        {
+          OutputDebugStringA("Was down\n");
+        }
+        if (isDown)
+        {
+          OutputDebugStringA("Is Down\n");
+        }
+      }
     }
     break;
 
@@ -171,10 +232,19 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND Window, UINT Message,
     case WM_DESTROY:
     {
       // TODO: Will be changed later. Handle as an error, recreate window?
-      Running = false;
+      GlobalRunning = false;
       OutputDebugStringA("WM_DESTROY\n");
     }
     break;
+
+    case WM_CLOSE:
+    {
+      OutputDebugStringA("WM_CLOSE\n");
+      // TODO: Will be changed later. Handle as a message to the user?
+      GlobalRunning = false;
+    }
+    break;
+
 
     default:
     {
@@ -203,27 +273,29 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
                                   CW_USEDEFAULT, 0, 0, Instance, 0);
     if (Window)
     {
-      Running = true;
+      GlobalRunning = true;
 
       int XOffset = 0;
       int YOffset = 0;
       HDC DeviceContext = GetDC(Window);
       Win32ResizeDIBSection(&GlobalBackBuffer, 1280, 720);
 
-      while (Running)
+      while (GlobalRunning)
       {
         MSG Message;
         while (PeekMessage(&Message, 0, 0, 0, PM_REMOVE))
         {
           if (Message.message == WM_QUIT)
           {
-            Running = false;
+            GlobalRunning = false;
           }
           TranslateMessage(&Message);
           DispatchMessage(&Message);
         }
-        win32_window_dimension Dimension = Win32GetWindowDimension(Window);
+
         RenderWeirdGradient2(&GlobalBackBuffer, XOffset, YOffset);
+
+        win32_window_dimension Dimension = Win32GetWindowDimension(Window);
         Win32DisplayBufferInWindow(&GlobalBackBuffer, DeviceContext,
                                    Dimension.Width, Dimension.Height);
         ++XOffset;
