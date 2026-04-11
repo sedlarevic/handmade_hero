@@ -15,6 +15,33 @@
 #define int32 int32_t
 #define int64 int64_t
 
+// TODO: Figure what the fuck is going on here man...
+
+#define X_INPUT_GET_STATE(name)                                                \
+  DWORD WINAPI name(DWORD dwUserIndex, XINPUT_STATE *pState)
+#define X_INPUT_SET_STATE(name)                                                \
+  DWORD WINAPI name(DWORD dwUserIndex, XINPUT_VIBRATION *pVibration)
+
+typedef X_INPUT_GET_STATE(x_input_get_state);
+typedef X_INPUT_SET_STATE(x_input_set_state);
+
+X_INPUT_GET_STATE(XInputGetStateStub)
+{
+  return (0);
+}
+
+X_INPUT_SET_STATE(XInputSetStateStub)
+{
+
+  return (0);
+}
+
+global_variable x_input_get_state *XInputGetState_ = XInputGetStateStub;
+global_variable x_input_set_state *XinputSetState_ = XInputSetStateStub;
+
+#define XInputGetState XInputGetState_
+#define XInputSetState XInputSetState_
+
 struct win32_offscreen_buffer
 {
   // NOTE: Pixels are always 32-bits wide,
@@ -39,6 +66,11 @@ struct win32_window_dimension
 
 global_variable win32_offscreen_buffer GlobalBackBuffer;
 global_variable bool GlobalRunning;
+
+internal_function void Win32LoadXInput()
+{
+  //TODO: Continue from here.
+}
 
 internal_function void RenderWeirdGradient1(win32_offscreen_buffer *Buffer,
                                             int XOffset, int YOffset)
@@ -256,6 +288,10 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND Window, UINT Message,
   return (Result);
 }
 
+internal_function void Win32HandleInput()
+{
+}
+
 int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
                      LPSTR LpCmdLine, int NShowCmd)
 {
@@ -293,6 +329,41 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
           DispatchMessage(&Message);
         }
 
+        DWORD dwResult;
+        for (DWORD ControllerIndex = 0; ControllerIndex < XUSER_MAX_COUNT;
+             ControllerIndex++)
+        {
+          XINPUT_STATE ControllerState;
+
+          // Simply get the state of the controller from XInput.
+          dwResult = XInputGetState(ControllerIndex, &ControllerState);
+
+          if (dwResult == ERROR_SUCCESS)
+          {
+            // Controller is connected
+            XINPUT_GAMEPAD *Gamepad = &ControllerState.Gamepad;
+            bool A = (Gamepad->wButtons & XINPUT_GAMEPAD_A);
+            bool B = (Gamepad->wButtons & XINPUT_GAMEPAD_B);
+            bool X = (Gamepad->wButtons & XINPUT_GAMEPAD_X);
+            bool Y = (Gamepad->wButtons & XINPUT_GAMEPAD_Y);
+            bool LEFT_SHOULDER =
+                (Gamepad->wButtons & XINPUT_GAMEPAD_LEFT_SHOULDER);
+            bool RIGHT_SHOULDER =
+                (Gamepad->wButtons & XINPUT_GAMEPAD_RIGHT_SHOULDER);
+            bool DPAD_UP = (Gamepad->wButtons & XINPUT_GAMEPAD_DPAD_UP);
+            bool DPAD_DOWN = (Gamepad->wButtons & XINPUT_GAMEPAD_DPAD_DOWN);
+            bool DPAD_LEFT = (Gamepad->wButtons & XINPUT_GAMEPAD_DPAD_LEFT);
+            bool DPAD_RIGHT = (Gamepad->wButtons & XINPUT_GAMEPAD_DPAD_RIGHT);
+            bool START = (Gamepad->wButtons & XINPUT_GAMEPAD_START);
+            bool BACK = (Gamepad->wButtons & XINPUT_GAMEPAD_BACK);
+            uint16 StickX = Gamepad->sThumbLX;
+            uint16 StickY = Gamepad->sThumbLY;
+          }
+          else
+          {
+            // Controller is not connected
+          }
+        }
         RenderWeirdGradient2(&GlobalBackBuffer, XOffset, YOffset);
 
         win32_window_dimension Dimension = Win32GetWindowDimension(Window);
