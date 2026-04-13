@@ -13,9 +13,10 @@
 #define int8 int8_t
 #define int16 int16_t
 #define int32 int32_t
-#define int64 int64_t
+#define bool32 int64_t
 
 // TODO: Figure what the fuck is going on here man...
+
 
 #define X_INPUT_GET_STATE(name)                                                \
   DWORD WINAPI name(DWORD dwUserIndex, XINPUT_STATE *pState)
@@ -27,17 +28,17 @@ typedef X_INPUT_SET_STATE(x_input_set_state);
 
 X_INPUT_GET_STATE(XInputGetStateStub)
 {
-  return (0);
+  return (ERROR_DEVICE_NOT_CONNECTED);
 }
 
 X_INPUT_SET_STATE(XInputSetStateStub)
 {
 
-  return (0);
+  return (ERROR_DEVICE_NOT_CONNECTED);
 }
 
 global_variable x_input_get_state *XInputGetState_ = XInputGetStateStub;
-global_variable x_input_set_state *XinputSetState_ = XInputSetStateStub;
+global_variable x_input_set_state *XInputSetState_ = XInputSetStateStub;
 
 #define XInputGetState XInputGetState_
 #define XInputSetState XInputSetState_
@@ -69,7 +70,38 @@ global_variable bool GlobalRunning;
 
 internal_function void Win32LoadXInput()
 {
-  //TODO: Continue from here.
+  HMODULE XInputLibrary = LoadLibraryA("Xinput1_4.dll");
+  if (!XInputLibrary)
+  {
+    XInputLibrary = LoadLibraryA("Xinput1_3.dll");
+  }
+  if (!XInputLibrary)
+  {
+    XInputLibrary = LoadLibraryA("Xinput9_1_0.dll");
+  }
+
+  if (XInputLibrary)
+  {
+    XInputGetState =
+        (x_input_get_state *)GetProcAddress(XInputLibrary, "XInputGetState");
+    if (!XInputGetState)
+    {
+      XInputGetState = XInputGetStateStub;
+    }
+
+    XInputSetState =
+        (x_input_set_state *)GetProcAddress(XInputLibrary, "XINputSetState");
+    if (!XInputSetState)
+    {
+      XInputSetState = XInputSetStateStub;
+    }
+  }
+  else
+  {
+
+    XInputGetState = XInputGetStateStub;
+    XInputSetState = XInputSetStateStub;
+  }
 }
 
 internal_function void RenderWeirdGradient1(win32_offscreen_buffer *Buffer,
@@ -239,6 +271,12 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND Window, UINT Message,
           OutputDebugStringA("Is Down\n");
         }
       }
+      bool32 AltKeyWasDown = ((LParam & (1 << 29) != 0));
+      if ((VKCode == VK_F4) && AltKeyWasDown)
+      {
+        OutputDebugStringA("ALT + F4 CLICKED!");
+        GlobalRunning = false;
+      }
     }
     break;
 
@@ -295,6 +333,7 @@ internal_function void Win32HandleInput()
 int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
                      LPSTR LpCmdLine, int NShowCmd)
 {
+  Win32LoadXInput();
   WNDCLASS WindowClass = {};
   WindowClass.style = CS_VREDRAW | CS_HREDRAW | CS_OWNDC;
   WindowClass.lpfnWndProc = Win32MainWindowCallback;

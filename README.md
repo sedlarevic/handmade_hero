@@ -9,3 +9,4 @@ I will try my best to gather some interesting and useful notes from this legenda
 ## Day 4
 ## Day 5
 ## Day 6
+## Day 7
