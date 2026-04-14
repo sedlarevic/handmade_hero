@@ -154,26 +154,30 @@ internal_function void Win32InitDSound(HWND Window, int32 SamplesPerSecond,
                                                       &PrimaryBuffer, 0)))
         {
 
-          OutputDebugStringA("Successfully created a Primary buffer\n");
+          OutputDebugStringA("Successfully created a Primary buffer.\n");
           // 3.1. Setup of a Primary buffer
           if (SUCCEEDED(PrimaryBuffer->SetFormat(&WaveFormat)))
           {
 
             OutputDebugStringA(
-                "Successfully set the format of a Primary buffer\n");
+                "Successfully set the format of a Primary buffer.\n");
           }
           else
           { // TODO: Diagnostic
+            OutputDebugStringA(
+                "Error while setting a format of a Primary buffer.\n");
           }
         }
         else
         {
           // TODO: Diagnostic
+          OutputDebugStringA("Error while creating a Primary buffer.\n");
         }
       }
       else
       {
         // TODO: Diagnostic
+        OutputDebugStringA("Error while setting Cooperative level.\n");
       }
       // 4. "Create" Secondary buffer
       DSBUFFERDESC BufferDescription = {};
@@ -187,23 +191,27 @@ internal_function void Win32InitDSound(HWND Window, int32 SamplesPerSecond,
                                                     &SecondaryBuffer, 0)))
       {
 
-        OutputDebugStringA("Successfully created a Secondary buffer\n");
+        OutputDebugStringA("Successfully created a Secondary buffer.\n");
 
         // 5. Play sound
       }
       else
       {
         // TODO: Diagnostic
+        OutputDebugStringA("Error while creating a Secondary buffer.\n");
       }
     }
     else
     {
       // TODO: Diagnostic
+      OutputDebugStringA("Error while calling DirectSoundCreate.\n");
     }
   }
   else
   {
     // TODO: Diagnostic
+
+    OutputDebugStringA("Error while loading DirectSoundLibrary.\n");
   }
 }
 
