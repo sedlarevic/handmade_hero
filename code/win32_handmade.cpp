@@ -1,7 +1,7 @@
+#include <dsound.h>
 #include <stdint.h>
 #include <windows.h>
 #include <xinput.h>
-
 #define internal_function static
 #define local_persist static
 #define global_variable static
@@ -42,6 +42,12 @@ global_variable x_input_set_state *XInputSetState_ = XInputSetStateStub;
 
 #define XInputGetState XInputGetState_
 #define XInputSetState XInputSetState_
+
+
+#define DIRECT_SOUND_CREATE(name)                                              \
+  HRESULT WINAPI name(LPCGUID pcGuidDevice, LPDIRECTSOUND *ppDS,               \
+                      LPUNKNOWN pUnkOuter)
+typedef DIRECT_SOUND_CREATE(direct_sound_create);
 
 struct win32_offscreen_buffer
 {
@@ -104,9 +110,105 @@ internal_function void Win32LoadXInput()
   }
 }
 
+internal_function void Win32InitDSound(HWND Window, int32 SamplesPerSecond,
+                                       int32 BufferSize)
+{
+  // 1. Load DirectSound Library
+  HMODULE DirectSoundLibrary = LoadLibraryA("dsound.dll");
+  if (DirectSoundLibrary)
+  {
+    OutputDebugStringA("Successfully loaded DirectSoundLibrary!\n");
+    // 2. Get DirectSound Object
+    direct_sound_create *DirectSoundCreate =
+        (direct_sound_create *)GetProcAddress(DirectSoundLibrary,
+                                              "DirectSoundCreate");
+    IDirectSound *DSoundObject;
+
+    if (DirectSoundCreate && SUCCEEDED(DirectSoundCreate(0, &DSoundObject, 0)))
+    {
+
+      OutputDebugStringA("Successfully called DirectSoundCreate\n");
+      WAVEFORMATEX WaveFormat = {};
+      WaveFormat.wFormatTag = WAVE_FORMAT_PCM;
+      WaveFormat.nChannels = 2;
+      WaveFormat.wBitsPerSample = 16;
+      WaveFormat.nSamplesPerSec = SamplesPerSecond;
+      WaveFormat.nBlockAlign =
+          WaveFormat.nChannels * WaveFormat.wBitsPerSample / 8;
+      WaveFormat.nAvgBytesPerSec =
+          WaveFormat.nSamplesPerSec * WaveFormat.nBlockAlign;
+
+      if (SUCCEEDED(DSoundObject->SetCooperativeLevel(Window, DSSCL_PRIORITY)))
+      {
+
+        OutputDebugStringA("Succesfully set Cooperative level.\n");
+        // 3. "Create" a Primary buffer
+
+        DSBUFFERDESC BufferDescription = {};
+        IDirectSoundBuffer *PrimaryBuffer;
+
+        BufferDescription.dwSize = sizeof(BufferDescription);
+        BufferDescription.dwFlags = DSBCAPS_PRIMARYBUFFER;
+
+        if (SUCCEEDED(DSoundObject->CreateSoundBuffer(&BufferDescription,
+                                                      &PrimaryBuffer, 0)))
+        {
+
+          OutputDebugStringA("Successfully created a Primary buffer\n");
+          // 3.1. Setup of a Primary buffer
+          if (SUCCEEDED(PrimaryBuffer->SetFormat(&WaveFormat)))
+          {
+
+            OutputDebugStringA(
+                "Successfully set the format of a Primary buffer\n");
+          }
+          else
+          { // TODO: Diagnostic
+          }
+        }
+        else
+        {
+          // TODO: Diagnostic
+        }
+      }
+      else
+      {
+        // TODO: Diagnostic
+      }
+      // 4. "Create" Secondary buffer
+      DSBUFFERDESC BufferDescription = {};
+      IDirectSoundBuffer *SecondaryBuffer;
+
+      BufferDescription.dwSize = sizeof(BufferDescription);
+      BufferDescription.dwBufferBytes = BufferSize;
+      BufferDescription.lpwfxFormat = &WaveFormat;
+
+      if (SUCCEEDED(DSoundObject->CreateSoundBuffer(&BufferDescription,
+                                                    &SecondaryBuffer, 0)))
+      {
+
+        OutputDebugStringA("Successfully created a Secondary buffer\n");
+
+        // 5. Play sound
+      }
+      else
+      {
+        // TODO: Diagnostic
+      }
+    }
+    else
+    {
+      // TODO: Diagnostic
+    }
+  }
+  else
+  {
+    // TODO: Diagnostic
+  }
+}
+
 internal_function void RenderWeirdGradient1(win32_offscreen_buffer *Buffer,
                                             int XOffset, int YOffset)
-
 {
 
   uint8 *Row = (uint8 *)Buffer->Memory;
@@ -326,10 +428,6 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND Window, UINT Message,
   return (Result);
 }
 
-internal_function void Win32HandleInput()
-{
-}
-
 int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
                      LPSTR LpCmdLine, int NShowCmd)
 {
@@ -352,9 +450,14 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
 
       int XOffset = 0;
       int YOffset = 0;
+
+      int SamplesPerSecond = 48000;
+      int BytesPerSample = sizeof(int16) * 2;
+      int SecondaryBufferSize = 2 * SamplesPerSecond * BytesPerSample;
+
       HDC DeviceContext = GetDC(Window);
       Win32ResizeDIBSection(&GlobalBackBuffer, 1280, 720);
-
+      Win32InitDSound(Window, SamplesPerSecond, SecondaryBufferSize);
       while (GlobalRunning)
       {
         MSG Message;
