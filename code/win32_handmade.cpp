@@ -1,6 +1,7 @@
 #include <dsound.h>
 #include <stdint.h>
 #include <windows.h>
+#include <xaudio2.h>
 #include <xinput.h>
 #define internal_function static
 #define local_persist static
@@ -15,8 +16,39 @@
 #define int32 int32_t
 #define bool32 int64_t
 
-// TODO: Figure what the fuck is going on here man...
+struct win32_offscreen_buffer
+{
+  // NOTE: Pixels are always 32-bits wide,
+  // Memory Order  0x BB GG RR xx
+  // Little Endian 0x xx RR GG BB
+  BITMAPINFO Info;
+  void *Memory;
+  HBITMAP Handle;
+  HDC DeviceContext;
+  int Width;
+  int Height;
+  int BytesPerPixel;
+  int MemorySize;
+  int Pitch;
+};
 
+struct win32_window_dimension
+{
+  int Height;
+  int Width;
+};
+
+// GLOBAL VARIABLES
+
+global_variable win32_offscreen_buffer GlobalBackBuffer;
+global_variable bool GlobalRunning;
+
+
+// ############ UTILS STUFF START #############
+
+// ############ UTILS STUFF END #############
+
+// ############ XINPUT STUFF START #############
 
 #define X_INPUT_GET_STATE(name)                                                \
   DWORD WINAPI name(DWORD dwUserIndex, XINPUT_STATE *pState)
@@ -42,37 +74,6 @@ global_variable x_input_set_state *XInputSetState_ = XInputSetStateStub;
 
 #define XInputGetState XInputGetState_
 #define XInputSetState XInputSetState_
-
-
-#define DIRECT_SOUND_CREATE(name)                                              \
-  HRESULT WINAPI name(LPCGUID pcGuidDevice, LPDIRECTSOUND *ppDS,               \
-                      LPUNKNOWN pUnkOuter)
-typedef DIRECT_SOUND_CREATE(direct_sound_create);
-
-struct win32_offscreen_buffer
-{
-  // NOTE: Pixels are always 32-bits wide,
-  // Memory Order  0x BB GG RR xx
-  // Little Endian 0x xx RR GG BB
-  BITMAPINFO Info;
-  void *Memory;
-  HBITMAP Handle;
-  HDC DeviceContext;
-  int Width;
-  int Height;
-  int BytesPerPixel;
-  int MemorySize;
-  int Pitch;
-};
-
-struct win32_window_dimension
-{
-  int Height;
-  int Width;
-};
-
-global_variable win32_offscreen_buffer GlobalBackBuffer;
-global_variable bool GlobalRunning;
 
 internal_function void Win32LoadXInput()
 {
@@ -109,6 +110,208 @@ internal_function void Win32LoadXInput()
     XInputSetState = XInputSetStateStub;
   }
 }
+
+// ############ XINPUT STUFF END #############
+
+// ############ XAUDIO2 STUFF START #############
+
+#define XAUDIO2_CREATE(name)                                                   \
+  HRESULT name(IXAudio2 **ppXAudio2, UINT32 Flags,                             \
+               XAUDIO2_PROCESSOR XAudio2Processor)
+
+typedef XAUDIO2_CREATE(xaudio2_create);
+
+#ifdef _XBOX // Big-Endian
+#define fourccRIFF 'RIFF'
+#define fourccDATA 'data'
+#define fourccFMT 'fmt '
+#define fourccWAVE 'WAVE'
+#define fourccXWMA 'XWMA'
+#define fourccDPDS 'dpds'
+#endif
+
+#ifndef _XBOX // Little-Endian
+#define fourccRIFF 'FFIR'
+#define fourccDATA 'atad'
+#define fourccFMT ' tmf'
+#define fourccWAVE 'EVAW'
+#define fourccXWMA 'AMWX'
+#define fourccDPDS 'sdpd'
+#endif
+internal_function HRESULT Win32XAudio2FindChunk(HANDLE hFile, DWORD fourcc,
+                                                DWORD &dwChunkSize,
+                                                DWORD &dwChunkDataPosition)
+{
+  HRESULT hr = S_OK;
+  if (INVALID_SET_FILE_POINTER == SetFilePointer(hFile, 0, NULL, FILE_BEGIN))
+    return HRESULT_FROM_WIN32(GetLastError());
+
+  DWORD dwChunkType;
+  DWORD dwChunkDataSize;
+  DWORD dwRIFFDataSize = 0;
+  DWORD dwFileType;
+  DWORD bytesRead = 0;
+  DWORD dwOffset = 0;
+
+  while (hr == S_OK)
+  {
+    DWORD dwRead;
+    if (0 == ReadFile(hFile, &dwChunkType, sizeof(DWORD), &dwRead, NULL))
+      hr = HRESULT_FROM_WIN32(GetLastError());
+
+    if (0 == ReadFile(hFile, &dwChunkDataSize, sizeof(DWORD), &dwRead, NULL))
+      hr = HRESULT_FROM_WIN32(GetLastError());
+
+    switch (dwChunkType)
+    {
+      case fourccRIFF:
+        dwRIFFDataSize = dwChunkDataSize;
+        dwChunkDataSize = 4;
+        if (0 == ReadFile(hFile, &dwFileType, sizeof(DWORD), &dwRead, NULL))
+          hr = HRESULT_FROM_WIN32(GetLastError());
+        break;
+
+      default:
+        if (INVALID_SET_FILE_POINTER ==
+            SetFilePointer(hFile, dwChunkDataSize, NULL, FILE_CURRENT))
+          return HRESULT_FROM_WIN32(GetLastError());
+    }
+
+    dwOffset += sizeof(DWORD) * 2;
+
+    if (dwChunkType == fourcc)
+    {
+      dwChunkSize = dwChunkDataSize;
+      dwChunkDataPosition = dwOffset;
+      return S_OK;
+    }
+
+    dwOffset += dwChunkDataSize;
+
+    if (bytesRead >= dwRIFFDataSize)
+      return S_FALSE;
+  }
+
+  return S_OK;
+}
+
+internal_function HRESULT Win32XAudio2ReadChunkData(HANDLE hFile, void *buffer,
+                                                    DWORD buffersize,
+                                                    DWORD bufferoffset)
+{
+  HRESULT hr = S_OK;
+  if (INVALID_SET_FILE_POINTER ==
+      SetFilePointer(hFile, bufferoffset, NULL, FILE_BEGIN))
+    return HRESULT_FROM_WIN32(GetLastError());
+  DWORD dwRead;
+  if (0 == ReadFile(hFile, buffer, buffersize, &dwRead, NULL))
+    hr = HRESULT_FROM_WIN32(GetLastError());
+  return hr;
+}
+
+internal_function void Win32InitXAudio2(HWND Window, int32 SamplesPerSecond)
+{
+  // NOTE: The audio played 2-4 times as fast, I've changed the SamplesPerSecond
+  // to 22050, and changed nChannels to 1, and it worked.
+
+  // 1. Load a library
+  HMODULE XAudio2Library = LoadLibraryA("xaudio2_9.dll");
+  if (XAudio2Library)
+  {
+    OutputDebugStringA("Successfully loaded XAudio2Library!!\n");
+    // 2. Get XAudio2Create Object
+    xaudio2_create *XAudio2Create =
+        (xaudio2_create *)GetProcAddress(XAudio2Library, "XAudio2Create");
+
+
+    IXAudio2 *XAudio2Object;
+    HRESULT Error = XAudio2Create(&XAudio2Object, 0, XAUDIO2_DEFAULT_PROCESSOR);
+    if (XAudio2Create && !Error)
+    {
+      // 3. Create a mastering voice
+      IXAudio2MasteringVoice *XAudio2MasteringVoice;
+      XAudio2Object->CreateMasteringVoice(&XAudio2MasteringVoice);
+      // 4. Defining a format
+      WAVEFORMATEX WaveFormat{};
+      WaveFormat.wFormatTag = WAVE_FORMAT_PCM;
+      WaveFormat.nChannels = 1;
+      WaveFormat.nSamplesPerSec = SamplesPerSecond;
+      WaveFormat.wBitsPerSample = 16;
+      WaveFormat.nBlockAlign =
+          WaveFormat.nChannels * WaveFormat.wBitsPerSample / 8;
+      WaveFormat.nAvgBytesPerSec =
+          WaveFormat.nSamplesPerSec * WaveFormat.nBlockAlign;
+      WaveFormat.cbSize = 0;
+      // 5. Creating a Source voice
+      IXAudio2SourceVoice *XAudio2SourceVoice;
+      XAudio2Object->CreateSourceVoice(&XAudio2SourceVoice, &WaveFormat);
+      // 6. Filling a buffer.
+      char *WavFileName = "..\\handmade\\data\\wav\\africa-toto.wav";
+      // 6.1. Open the file
+      HANDLE File = CreateFile(WavFileName, GENERIC_READ, FILE_SHARE_READ, NULL,
+                               OPEN_EXISTING, 0, NULL);
+
+      if (INVALID_HANDLE_VALUE != File &&
+          INVALID_SET_FILE_POINTER != SetFilePointer(File, 0, NULL, FILE_BEGIN))
+      {
+        DWORD ChunkSize;
+        DWORD ChunkPosition;
+        Win32XAudio2FindChunk(File, fourccRIFF, ChunkSize, ChunkPosition);
+        DWORD Filetype;
+        Win32XAudio2ReadChunkData(File, &Filetype, sizeof(DWORD),
+                                  ChunkPosition);
+        if (Filetype == fourccWAVE)
+        {
+          // 6.2. Fill out the audio data buffer with the contents of the
+          // fourccDATA chunk
+          Win32XAudio2FindChunk(File, fourccDATA, ChunkSize, ChunkPosition);
+          BYTE *DataBuffer = new BYTE[ChunkSize];
+          Win32XAudio2ReadChunkData(File, DataBuffer, ChunkSize, ChunkPosition);
+
+
+          XAUDIO2_BUFFER XAudio2Buffer{};
+          XAudio2Buffer.Flags = XAUDIO2_END_OF_STREAM;
+          XAudio2Buffer.AudioBytes = ChunkSize;
+          XAudio2Buffer.pAudioData = DataBuffer;
+          XAudio2Buffer.PlayBegin = 0;
+          XAudio2Buffer.PlayLength = 0;
+          XAudio2Buffer.LoopBegin = 0;
+          XAudio2Buffer.LoopLength = 0;
+          XAudio2Buffer.LoopCount = 0;
+
+          // 7. Submit the buffer to the source voice, and start the voice.
+          XAudio2SourceVoice->SubmitSourceBuffer(&XAudio2Buffer, NULL);
+          XAudio2SourceVoice->Start(0);
+        }
+        else
+        {
+          // TODO: Diagnostic
+          OutputDebugStringA("Filetype != fourccWAVE\n");
+        }
+      }
+      else
+      {
+        // TODO: Diagnostic
+        OutputDebugStringA("Something went wrong with WAV file loading. NOTE: "
+                           "Check the absolute path, from BufferLength\n");
+      }
+    }
+    else
+    {
+      OutputDebugStringA("Error while calling XAudioCreate\n");
+    }
+  }
+}
+
+// ############ XAUDIO2 STUFF END #############
+
+
+// ############ DIRECTSOUND STUFF START #############
+
+#define DIRECT_SOUND_CREATE(name)                                              \
+  HRESULT WINAPI name(LPCGUID pcGuidDevice, LPDIRECTSOUND *ppDS,               \
+                      LPUNKNOWN pUnkOuter)
+typedef DIRECT_SOUND_CREATE(direct_sound_create);
 
 internal_function void Win32InitDSound(HWND Window, int32 SamplesPerSecond,
                                        int32 BufferSize)
@@ -214,6 +417,8 @@ internal_function void Win32InitDSound(HWND Window, int32 SamplesPerSecond,
     OutputDebugStringA("Error while loading DirectSoundLibrary.\n");
   }
 }
+
+// ############ DIRECTSOUND STUFF END #############
 
 internal_function void RenderWeirdGradient1(win32_offscreen_buffer *Buffer,
                                             int XOffset, int YOffset)
@@ -466,6 +671,7 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
       HDC DeviceContext = GetDC(Window);
       Win32ResizeDIBSection(&GlobalBackBuffer, 1280, 720);
       Win32InitDSound(Window, SamplesPerSecond, SecondaryBufferSize);
+      Win32InitXAudio2(Window, 22050);
       while (GlobalRunning)
       {
         MSG Message;
