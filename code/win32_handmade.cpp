@@ -443,8 +443,6 @@ internal_function void Win32FillSoundBuffer(win32_sound_output *SoundOutput,
                                             DWORD ByteToLock,
                                             DWORD BytesToWrite)
 {
-  // TODO: BUG: As time passes, sine wave sound is becoming higher and then lower, not
-  // sure what the problem is yet.
   VOID *Region1;
   DWORD Region1Size;
   VOID *Region2;
@@ -459,13 +457,18 @@ internal_function void Win32FillSoundBuffer(win32_sound_output *SoundOutput,
     for (DWORD SampleIndex = 0; SampleIndex < Region1SampleCount; SampleIndex++)
     {
 
+      if (SoundOutput->tSine > Pi32)
+      {
+        SoundOutput->tSine -= 2.0 * Pi32;
+      }
+
       real32 SineValue = sinf(SoundOutput->tSine);
       int16 SampleValue = (int16)(SineValue * SoundOutput->ToneVolume);
       *SampleOut++ = SampleValue;
       *SampleOut++ = SampleValue;
 
       SoundOutput->tSine +=
-          2.0f * Pi32 * 1.0f / (real32)SoundOutput->WavePeriod;
+          (2.0f * Pi32 * 1.0f) / (real32)SoundOutput->WavePeriod;
       ++SoundOutput->RunningSampleIndex;
     }
 
@@ -475,12 +478,23 @@ internal_function void Win32FillSoundBuffer(win32_sound_output *SoundOutput,
     for (DWORD SampleIndex = 0; SampleIndex < Region2SampleCount; SampleIndex++)
     {
 
+      /*
+       * NOTE: Since using real32 (float) and not resetting the phase by
+       * subtracting 2 pi means the phase will eventually climb up to where the
+       * sin() function's phase unwrapping algorithm doesn't have enough bits of
+       * quantization, or valid mantissa, left over afterward unwrapping.
+       * */
+      if (SoundOutput->tSine > Pi32)
+      {
+        SoundOutput->tSine -= 2.0 * Pi32;
+      }
+
       real32 SineValue = sinf(SoundOutput->tSine);
       int16 SampleValue = (int16)(SineValue * SoundOutput->ToneVolume);
       *SampleOut++ = SampleValue;
       *SampleOut++ = SampleValue;
       SoundOutput->tSine +=
-          2.0f * Pi32 * 1.0f / (real32)SoundOutput->WavePeriod;
+          (2.0f * Pi32 * 1.0f) / (real32)SoundOutput->WavePeriod;
       ++SoundOutput->RunningSampleIndex;
     }
     GlobalSecondaryBuffer->Unlock(Region1, Region1Size, Region2, Region2Size);
