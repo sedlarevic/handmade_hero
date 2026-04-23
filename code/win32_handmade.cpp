@@ -55,6 +55,8 @@ struct win32_sound_output
   uint32 RunningSampleIndex;
   int SecondaryBufferSize;
   int WavePeriod;
+  real32 tSine;
+  int LatencySampleCount;
 };
 
 // GLOBAL VARIABLES
@@ -441,6 +443,8 @@ internal_function void Win32FillSoundBuffer(win32_sound_output *SoundOutput,
                                             DWORD ByteToLock,
                                             DWORD BytesToWrite)
 {
+  // TODO: BUG: As time passes, sine wave sound is becoming higher and then lower, not
+  // sure what the problem is yet.
   VOID *Region1;
   DWORD Region1Size;
   VOID *Region2;
@@ -455,13 +459,14 @@ internal_function void Win32FillSoundBuffer(win32_sound_output *SoundOutput,
     for (DWORD SampleIndex = 0; SampleIndex < Region1SampleCount; SampleIndex++)
     {
 
-      real32 t = 2.0f * Pi32 * (real32)SoundOutput->RunningSampleIndex /
-                 (real32)SoundOutput->WavePeriod;
-      real32 SineValue = sinf(t);
+      real32 SineValue = sinf(SoundOutput->tSine);
       int16 SampleValue = (int16)(SineValue * SoundOutput->ToneVolume);
       *SampleOut++ = SampleValue;
       *SampleOut++ = SampleValue;
-      SoundOutput->RunningSampleIndex++;
+
+      SoundOutput->tSine +=
+          2.0f * Pi32 * 1.0f / (real32)SoundOutput->WavePeriod;
+      ++SoundOutput->RunningSampleIndex;
     }
 
     SampleOut = (int16 *)Region2;
@@ -470,13 +475,13 @@ internal_function void Win32FillSoundBuffer(win32_sound_output *SoundOutput,
     for (DWORD SampleIndex = 0; SampleIndex < Region2SampleCount; SampleIndex++)
     {
 
-      real32 t = 2.0f * Pi32 * (real32)SoundOutput->RunningSampleIndex /
-                 (real32)SoundOutput->WavePeriod;
-      real32 SineValue = sinf(t);
+      real32 SineValue = sinf(SoundOutput->tSine);
       int16 SampleValue = (int16)(SineValue * SoundOutput->ToneVolume);
       *SampleOut++ = SampleValue;
       *SampleOut++ = SampleValue;
-      SoundOutput->RunningSampleIndex++;
+      SoundOutput->tSine +=
+          2.0f * Pi32 * 1.0f / (real32)SoundOutput->WavePeriod;
+      ++SoundOutput->RunningSampleIndex;
     }
     GlobalSecondaryBuffer->Unlock(Region1, Region1Size, Region2, Region2Size);
   }
@@ -737,7 +742,7 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
       SoundOutput.SamplesPerSecond = 48000;
       SoundOutput.BytesPerSample = sizeof(int16) * 2;
       SoundOutput.RunningSampleIndex = 0;
-
+      SoundOutput.LatencySampleCount = SoundOutput.SamplesPerSecond / 15;
       SoundOutput.SecondaryBufferSize =
           2 * SoundOutput.SamplesPerSecond * SoundOutput.BytesPerSample;
       SoundOutput.WavePeriod =
@@ -748,7 +753,9 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
       Win32InitDSound(Window, SoundOutput.SamplesPerSecond,
                       SoundOutput.SecondaryBufferSize);
 
-      Win32FillSoundBuffer(&SoundOutput, 0, SoundOutput.SecondaryBufferSize);
+      Win32FillSoundBuffer(&SoundOutput, 0,
+                           SoundOutput.LatencySampleCount *
+                               SoundOutput.BytesPerSample);
       GlobalSecondaryBuffer->Play(0, 0, DSBPLAY_LOOPING);
       GlobalRunning = true;
       // Win32InitXAudio2(Window, 22050);
@@ -794,6 +801,7 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
             bool BACK = (Gamepad->wButtons & XINPUT_GAMEPAD_BACK);
             uint16 StickX = Gamepad->sThumbLX;
             uint16 StickY = Gamepad->sThumbLY;
+            // TODO: Add changing sound by pressing a gamepad button.
           }
           else
           {
@@ -804,20 +812,21 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
 
         // Defining Bytes to write to
 
-        //           Play Cursor      ByteToLock
-        // case 1: |-----I---------------I--------|
+        //          Play C  Target C ByteToLock
+        // case 1: |-----I-I-------------I--------|
         // When Play Cursor is behind then we can overwrite the buffer in 2
         // regions, since this is a circular buffer:
-        //    Play Cursor   ByteToLock  Secondary Buffer Size
-        // |-----I---------------I@@@@@@@@| <- first region to overwrite
-        // |@@@@@I---------------I--------| <- second region to overwrite
+        //  Play C Target C  ByteToLock  Secondary Buffer Size
+        // |-----I-I-------------I@@@@@@@@| <- first region to overwrite
+        // |@@@@@I@I-------------I--------| <- second region to overwrite
         //
-        //              ByteToLock   Play Cursor
-        // case 2: |-----I---------------I--------|
+        //          ByteToLock      Play C  Target C
+        // case 2: |-----I---------------I-I------|
         // When ByteToLock is behind a Play Cursor, then we can overwrite the
-        // buffer to the byte of the Play Cursor.
-        //    ByteToLock    Play Cursor
-        // |-----I@@@@@@@@@@@@@@@I--------| <------ first and only region to
+        // buffer to the byte of the Target Cursor, which is a little bit ahead
+        // of a Play Cursor, to mitigate latency.
+        //    ByteToLock    Play C Target C
+        // |-----I@@@@@@@@@@@@@@@I@I------| <------ first and only region to
         // overwrite
 
         DWORD PlayCursor;
@@ -831,22 +840,21 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
           DWORD ByteToLock =
               (SoundOutput.RunningSampleIndex * SoundOutput.BytesPerSample) %
               SoundOutput.SecondaryBufferSize;
+          DWORD TargetCursor = ((PlayCursor + (SoundOutput.LatencySampleCount *
+                                               SoundOutput.BytesPerSample)) %
+                                SoundOutput.SecondaryBufferSize);
           DWORD BytesToWrite;
           // Calculate how many bytes are there to write to.
-          if (ByteToLock == PlayCursor)
-          {
-            BytesToWrite = 0;
-          }
-          else if (ByteToLock > PlayCursor)
+          if (ByteToLock > TargetCursor)
           {
             // Play cursor is behind
             BytesToWrite =
                 SoundOutput.SecondaryBufferSize - ByteToLock; // region 1
-            BytesToWrite += PlayCursor;                       // region 2
+            BytesToWrite += TargetCursor;                     // region 2
           }
           else
           {
-            BytesToWrite = PlayCursor - ByteToLock; // region 1
+            BytesToWrite = TargetCursor - ByteToLock; // region 1
           }
 
           // Preparing a specific portion of a buffer for writing. Using
