@@ -1,6 +1,7 @@
 #include <dsound.h>
 #include <math.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <windows.h>
 #include <xaudio2.h>
 #include <xinput.h>
@@ -773,6 +774,14 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
       GlobalSecondaryBuffer->Play(0, 0, DSBPLAY_LOOPING);
       GlobalRunning = true;
       // Win32InitXAudio2(Window, 22050);
+
+      // Metrics
+      LARGE_INTEGER LastCounter;
+      LARGE_INTEGER CycleFrequency;
+
+      QueryPerformanceCounter(&LastCounter);
+      QueryPerformanceFrequency(&CycleFrequency);
+      uint64 LastCycleCount = __rdtsc();
       while (GlobalRunning)
       {
         MSG Message;
@@ -877,11 +886,44 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
           Win32FillSoundBuffer(&SoundOutput, ByteToLock, BytesToWrite);
         }
 
+
         win32_window_dimension Dimension = Win32GetWindowDimension(Window);
         Win32DisplayBufferInWindow(&GlobalBackBuffer, DeviceContext,
                                    Dimension.Width, Dimension.Height);
         ++XOffset;
         ++YOffset;
+
+        // Metrics evaluation
+        LARGE_INTEGER EndCounter;
+        QueryPerformanceCounter(&EndCounter);
+        int64 EndCycleCount = __rdtsc();
+
+        int64 CountsElapsed = EndCounter.QuadPart - LastCounter.QuadPart;
+        int64 CyclesElapsed = EndCycleCount - LastCycleCount;
+        // Frames per Second
+        real32 FPS = (real32)CycleFrequency.QuadPart / (real32)CountsElapsed;
+        // MegaCycles per Frame
+        real32 MCPF = ((real32)CyclesElapsed / (1000.0f * 1000.0f));
+        // Milliseconds per Frame
+        real32 MSPerFrame =
+            1000.0f * ((real32)CountsElapsed / (real32)CycleFrequency.QuadPart);
+
+        char Buffer[256];
+        // Example:
+        /*
+         * FPS (f/s): 123.87 -> If 1 Frame took 8 milliseconds, we can divide
+         *  1000 (milliseconds in a second) / 8.07, and we get FPS.
+         * MSPerFrame (ms/f): 8.07 -> In a given frame we took 8 milliseconds.
+         * MCPF (mc/f): 25.77 -> Executed 25 Million instructions per frame.
+         */
+        snprintf(Buffer, 255,
+                 "FPS (f/s): %.02f\nMSPerFrame (ms/f): %.02f\nMCPF (mc/f): "
+                 "%.02f\n\n",
+                 FPS, MSPerFrame, MCPF);
+        OutputDebugStringA(Buffer);
+
+        LastCounter = EndCounter;
+        LastCycleCount = EndCycleCount;
       }
     }
     else
