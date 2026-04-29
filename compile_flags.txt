@@ -1,0 +1,6 @@
+-x
+c++
+--driver-mode=cl
+-fms-compatibility
+-fms-extensions
+-D_CRT_SECURE_NO_WARNINGS
