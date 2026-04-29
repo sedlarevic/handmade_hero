@@ -1,15 +1,4 @@
-#include <dsound.h>
-#include <math.h>
 #include <stdint.h>
-#include <stdio.h>
-#include <windows.h>
-#include <xaudio2.h>
-#include <xinput.h>
-
-#define internal_function static
-#define local_persist static
-#define global_variable static
-#define Pi32 3.14159265359f
 
 typedef uint8_t uint8;
 typedef uint16_t uint16;
@@ -25,7 +14,21 @@ typedef int32 bool32;
 typedef float real32;
 typedef double real64;
 
-struct win32_offscreen_buffer
+#define internal_function static
+#define local_persist static
+#define global_variable static
+#define Pi32 3.14159265359f
+
+#include "handmade.cpp"
+
+#include <dsound.h>
+#include <math.h>
+#include <stdio.h>
+#include <windows.h>
+#include <xaudio2.h>
+#include <xinput.h>
+
+typedef struct win32_offscreen_buffer
 {
   // NOTE: Pixels are always 32-bits wide,
   // Memory Order  0x BB GG RR xx
@@ -39,15 +42,15 @@ struct win32_offscreen_buffer
   int BytesPerPixel;
   int MemorySize;
   int Pitch;
-};
+} win32_offscreen_buffer;
 
-struct win32_window_dimension
+typedef struct win32_window_dimension
 {
   int Height;
   int Width;
-};
+} win32_window_dimension;
 
-struct win32_sound_output
+typedef struct win32_sound_output
 {
   int ToneHz;
   int ToneVolume;
@@ -58,7 +61,7 @@ struct win32_sound_output
   int WavePeriod;
   real32 tSine;
   int LatencySampleCount;
-};
+} win32_sound_output;
 
 // GLOBAL VARIABLES
 
@@ -507,25 +510,6 @@ internal_function void Win32FillSoundBuffer(win32_sound_output *SoundOutput,
 
 // ############ DIRECTSOUND STUFF END #############
 
-internal_function void RenderWeirdGradient1(win32_offscreen_buffer *Buffer,
-                                            int XOffset, int YOffset)
-{
-
-  uint8 *Row = (uint8 *)Buffer->Memory;
-  for (int Y = 0; Y < Buffer->Height; ++Y)
-  {
-
-    uint32 *Pixel = (uint32 *)Row;
-    for (int X = 0; X < Buffer->Width; ++X)
-    {
-      uint8 Red = X + XOffset;
-      uint8 Green = 0;
-      uint8 Blue = Y + YOffset;
-      *Pixel++ = ((Red << 16) | (Green << 8) | Blue);
-    }
-    Row += Buffer->Pitch;
-  }
-}
 
 internal_function void RenderWeirdGradient2(win32_offscreen_buffer *Buffer,
                                             int XOffset, int YOffset)
@@ -585,7 +569,6 @@ internal_function void Win32ResizeDIBSection(win32_offscreen_buffer *Buffer,
   Buffer->MemorySize = (Buffer->Width * Buffer->Height) * Buffer->BytesPerPixel;
   Buffer->Memory = VirtualAlloc(0, Buffer->MemorySize, MEM_RESERVE | MEM_COMMIT,
                                 PAGE_READWRITE);
-  RenderWeirdGradient1(Buffer, Width, Height);
 }
 
 internal_function void
@@ -831,8 +814,13 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
             // Controller is not connected
           }
         }
-        RenderWeirdGradient2(&GlobalBackBuffer, XOffset, YOffset);
 
+        game_offscreen_buffer GameOffscreenBuffer = {};
+        GameOffscreenBuffer.Memory = GlobalBackBuffer.Memory;
+        GameOffscreenBuffer.Height = GlobalBackBuffer.Height;
+        GameOffscreenBuffer.Width = GlobalBackBuffer.Width;
+        GameOffscreenBuffer.Pitch = GlobalBackBuffer.Pitch;
+        GameUpdateAndRender(&GameOffscreenBuffer, XOffset, YOffset);
         // Defining Bytes to write to
 
         //          Play C  Target C ByteToLock
@@ -916,12 +904,13 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
          * MSPerFrame (ms/f): 8.07 -> In a given frame we took 8 milliseconds.
          * MCPF (mc/f): 25.77 -> Executed 25 Million instructions per frame.
          */
+#if 0
         snprintf(Buffer, 255,
                  "FPS (f/s): %.02f\nMSPerFrame (ms/f): %.02f\nMCPF (mc/f): "
                  "%.02f\n\n",
                  FPS, MSPerFrame, MCPF);
         OutputDebugStringA(Buffer);
-
+#endif
         LastCounter = EndCounter;
         LastCycleCount = EndCycleCount;
       }
