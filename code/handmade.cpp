@@ -1,3 +1,4 @@
+#include <cmath>
 #include <cstdint>
 
 typedef uint8_t uint8;
@@ -20,6 +21,8 @@ typedef double real64;
 #define local_persist static
 #define global_variable static
 
+#define Pi32 3.14159265359f
+
 internal_function void RenderWeirdGradient(game_offscreen_buffer *Buffer,
                                            int XOffset, int YOffset)
 {
@@ -40,9 +43,42 @@ internal_function void RenderWeirdGradient(game_offscreen_buffer *Buffer,
   }
 }
 
-void GameUpdateAndRender(game_offscreen_buffer *Buffer, int XOffset,
-                         int YOffset)
+internal_function void GameOutputSound(game_sound_output_buffer *SoundBuffer)
 {
-  RenderWeirdGradient(Buffer, XOffset, YOffset);
+  local_persist real32 tSine;
+  int16 ToneVolume = 3000;
+  int16 ToneHz = 256;
+  int WavePeriod = SoundBuffer->SamplesPerSecond / ToneHz;
+  int16 *SampleOut = SoundBuffer->Samples;
+  for (int SampleIndex = 0; SampleIndex < SoundBuffer->SampleCount;
+       SampleIndex++)
+  {
+    /*
+     * NOTE: Since using real32 (float) and not resetting the phase by
+     * subtracting 2 pi means the phase will eventually climb up to where the
+     * sin() function's phase unwrapping algorithm doesn't have enough bits of
+     * quantization, or valid mantissa, left over afterward unwrapping.
+     * */
+
+    if (tSine > 2.0f * Pi32)
+    {
+      tSine -= 2.0 * Pi32;
+    }
+
+    real32 SineValue = sinf(tSine);
+    int16 SampleValue = (int16)(SineValue * ToneVolume);
+
+    *SampleOut++ = SampleValue;
+    *SampleOut++ = SampleValue;
+
+    tSine += (2.0f * Pi32 * 1.0f) / (real32)WavePeriod;
+  }
 }
 
+void GameUpdateAndRender(game_offscreen_buffer *Buffer, int XOffset,
+                         int YOffset, game_sound_output_buffer *SoundBuffer)
+{
+  // TODO: Allow sample offsets here for more robust platform options.
+  GameOutputSound(SoundBuffer);
+  RenderWeirdGradient(Buffer, XOffset, YOffset);
+}
