@@ -1,20 +1,6 @@
 #include <cmath>
 #include <cstdint>
 
-typedef uint8_t uint8;
-typedef uint16_t uint16;
-typedef uint32_t uint32;
-typedef uint64_t uint64;
-
-typedef int8_t int8;
-typedef int16_t int16;
-typedef int32_t int32;
-typedef int64_t int64;
-typedef int32 bool32;
-
-typedef float real32;
-typedef double real64;
-
 #include "handmade.h"
 
 #define internal_function static
@@ -75,9 +61,28 @@ internal_function void GameOutputSound(game_sound_output_buffer *SoundBuffer)
   }
 }
 
-void GameUpdateAndRender(game_offscreen_buffer *Buffer, int XOffset,
-                         int YOffset, game_sound_output_buffer *SoundBuffer)
+void GameUpdateAndRender(game_input *Input, game_offscreen_buffer *Buffer,
+                         game_sound_output_buffer *SoundBuffer)
 {
+  local_persist int XOffset = 0;
+  local_persist int YOffset = 0;
+  local_persist int ToneHz = 256;
+  game_controller_input *Input0 = &Input->Controllers[0];
+  if (Input0->IsAnalog)
+  {
+    // TODO: Use analog movement tuning
+    ToneHz = 256 + (int)(128.0f * (Input0->EndY));
+    YOffset += (int)4.0f * (Input0->EndX);
+  }
+  else
+  {
+    // TODO: Use digital movement tuning
+  }
+
+  if (Input0->Down.EndedDown)
+  {
+    XOffset += 1;
+  }
   // TODO: Allow sample offsets here for more robust platform options.
   GameOutputSound(SoundBuffer);
   RenderWeirdGradient(Buffer, XOffset, YOffset);

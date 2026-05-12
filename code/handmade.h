@@ -3,6 +3,7 @@
  * basically create our own platform instruction API in this header file, and
  * all of our platform non-specific code will call into it this way.*/
 #if !defined(HANDMADE_H)
+#define ArrayCount(Array) (sizeof(Array) / sizeof((Array)[0]))
 struct game_offscreen_buffer
 {
   void *Memory;
@@ -13,13 +14,55 @@ struct game_offscreen_buffer
 
 struct game_sound_output_buffer
 {
-
   int SamplesPerSecond;
   int SampleCount;
   int16 *Samples;
 };
-void GameUpdateAndRender(game_offscreen_buffer *Buffer, int XOffset,
-                           int YOffset, game_sound_output_buffer *SoundBuffer);
+
+struct game_button_state
+{
+  int HalfTransitionCount;
+  bool32 EndedDown;
+};
+
+struct game_controller_input
+{
+  bool32 IsAnalog;
+
+  real32 StartX;
+  real32 StartY;
+
+  real32 MinX;
+  real32 MinY;
+  real32 MaxX;
+  real32 MaxY;
+
+  real32 EndX;
+  real32 EndY;
+
+  union
+  {
+    game_button_state Buttons[6];
+
+    struct
+    {
+      game_button_state Up;
+      game_button_state Down;
+      game_button_state Left;
+      game_button_state Right;
+      game_button_state LeftShoulder;
+      game_button_state RightShoulder;
+    };
+  };
+};
+
+struct game_input
+{
+  game_controller_input Controllers[4];
+};
+
+void GameUpdateAndRender(game_input *Input, game_offscreen_buffer *Buffer,
+                         game_sound_output_buffer *SoundBuffer);
 
 #define HANDMADE_H
 #endif
