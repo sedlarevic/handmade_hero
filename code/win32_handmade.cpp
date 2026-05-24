@@ -38,9 +38,101 @@ global_variable win32_offscreen_buffer GlobalBackBuffer;
 global_variable bool GlobalRunning;
 global_variable IDirectSoundBuffer *GlobalSecondaryBuffer;
 
-// ############ UTILS STUFF START #############
+// ########## UTILS START #############
 
-// ############ UTILS STUFF END #############
+// ########## UTILS END #############
+
+// ########### FILE IO START #############
+
+internal_function debug_read_file_result
+DEBUGPlatformReadEntireFile(char *Filename)
+{
+  debug_read_file_result Result = {};
+  HANDLE FileHandle = CreateFileA(Filename, GENERIC_READ, FILE_SHARE_READ, 0,
+                                  OPEN_EXISTING, 0, 0);
+
+  if (FileHandle != INVALID_HANDLE_VALUE)
+  {
+    LARGE_INTEGER FileSize;
+    if (GetFileSizeEx(FileHandle, &FileSize))
+    {
+      Result.Contents = VirtualAlloc(0, FileSize.QuadPart,
+                                     MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+      if (Result.Contents)
+      {
+        DWORD BytesRead;
+        if (ReadFile(FileHandle, Result.Contents, FileSize.QuadPart, &BytesRead,
+                     0) &&
+            (FileSize.QuadPart == BytesRead))
+        {
+          // NOTE: File read successfully.
+          Result.ContentsSize = BytesRead;
+        }
+        else
+        {
+
+          // TODO: LOG: File reading failed.
+          DEBUGPlatformFreeFileMemory(Result.Contents);
+          Result.Contents = 0;
+        }
+      }
+      else
+      {
+        // TODO: LOG: Memory Allocation failed.
+      }
+    }
+    else
+    {
+      // TODO: LOG: File size evaluation failed.
+    }
+    CloseHandle(FileHandle);
+  }
+  else
+  {
+    // TODO: LOG: File handle creation failed.
+  }
+
+  return (Result);
+}
+
+void DEBUGPlatformFreeFileMemory(void *Memory)
+{
+  if (Memory)
+  {
+    VirtualFree(Memory, 0, MEM_RELEASE);
+  }
+}
+
+bool32 DEBUGPlatformWriteEntireFile(char *Filename, uint32 MemorySize,
+                                    void *Memory)
+{
+
+  bool32 Result = false;
+  HANDLE FileHandle =
+      CreateFileA(Filename, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, 0, 0);
+
+  if (FileHandle != INVALID_HANDLE_VALUE)
+  {
+    DWORD BytesWritten;
+    if (WriteFile(FileHandle, Memory, MemorySize, &BytesWritten, 0))
+    {
+      // NOTE: File write successful.
+      Result = (BytesWritten == MemorySize);
+    }
+    else
+    {
+      // TODO: LOG: File writing failed.
+    }
+    CloseHandle(FileHandle);
+  }
+  else
+  {
+    // TODO: LOG: File Handle creation failed.
+  }
+  return (Result);
+}
+
+// ########### FILE IO END #############
 
 // ############ XINPUT STUFF START #############
 
@@ -216,8 +308,8 @@ internal_function HRESULT Win32XAudio2ReadChunkData(HANDLE hFile, void *buffer,
 
 internal_function void Win32InitXAudio2(HWND Window, int32 SamplesPerSecond)
 {
-  // NOTE: The audio played 2-4 times as fast, I've changed the SamplesPerSecond
-  // to 22050, and changed nChannels to 1, and it worked.
+  // NOTE: The audio played 2-4 times as fast, I've changed the
+  // SamplesPerSecond to 22050, and changed nChannels to 1, and it worked.
 
   // 1. Load a library
   HMODULE XAudio2Library = LoadLibraryA("xaudio2_9.dll");
@@ -740,9 +832,9 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
       // Initializing game memory
       game_memory GameMemory = {};
 
-      // NOTE: When in development build, it is more handy to address the memory
-      // somewhere in the middle of an address space (0-~4TB).
-      // It makes debugging easier, since we have a pointer point at the same
+      // NOTE: When in development build, it is more handy to address the
+      // memory somewhere in the middle of an address space (0-~4TB). It
+      // makes debugging easier, since we have a pointer point at the same
       // location in a section of a program every time.
       // When not in development build, we let VirtualAlloc (OS) handle the
       // addressing of memory.
@@ -753,13 +845,12 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
 #endif
       // Specifying sizes for each memory block
       GameMemory.PermanentStorageSize = Megabytes(64);
-      GameMemory.TransientStorageSize =
-          Gigabytes((uint64)4); // NOTE: INTEGRAL PROMOTION
+      GameMemory.TransientStorageSize = Gigabytes(4);
 
       uint64 TotalStorageSize =
           GameMemory.PermanentStorageSize + GameMemory.TransientStorageSize;
-      // Allocation of memory (only once), we then offset the transient memory
-      // pointer to point after the size of permanent memory.
+      // Allocation of memory (only once), we then offset the transient
+      // memory pointer to point after the size of permanent memory.
 
       /*
        * ____________________________ 0
@@ -904,21 +995,21 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
 
           //          Play C  Target C ByteToLock
           // case 1: |-----I-I-------------I--------|
-          // When Play Cursor is behind then we can overwrite the buffer in 2
-          // regions, since this is a circular buffer:
+          // When Play Cursor is behind then we can overwrite the buffer in
+          // 2 regions, since this is a circular buffer:
           //  Play C Target C  ByteToLock  Secondary Buffer Size
           // |-----I-I-------------I@@@@@@@@| <- first region to overwrite
           // |@@@@@I@I-------------I--------| <- second region to overwrite
           //
           //          ByteToLock      Play C  Target C
           // case 2: |-----I---------------I-I------|
-          // When ByteToLock is behind a Play Cursor, then we can overwrite the
-          // buffer to the byte of the Target Cursor, which is a little bit
-          // ahead of a Play Cursor, to mitigate latency.
+          // When ByteToLock is behind a Play Cursor, then we can overwrite
+          // the buffer to the byte of the Target Cursor, which is a little
+          // bit ahead of a Play Cursor, to mitigate latency.
           //    ByteToLock    Play C Target C
-          // |-----I@@@@@@@@@@@@@@@I@I------| <------ first and only region to
-          // overwrite
-          // If successful, we get the play cursor and write cursor position.
+          // |-----I@@@@@@@@@@@@@@@I@I------| <------ first and only region
+          // to overwrite If successful, we get the play cursor and write
+          // cursor position.
 
           DWORD ByteToLock;
           DWORD BytesToWrite;
@@ -930,8 +1021,8 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
           if (SUCCEEDED(GlobalSecondaryBuffer->GetCurrentPosition(
                   &PlayCursor, &WriteCursor)))
           {
-            // NOTE: We are using a mod because we are working with a circular
-            // buffer.
+            // NOTE: We are using a mod because we are working with a
+            // circular buffer.
             ByteToLock =
                 (SoundOutput.RunningSampleIndex * SoundOutput.BytesPerSample) %
                 SoundOutput.SecondaryBufferSize;
@@ -996,10 +1087,11 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
           char Buffer[256];
           // Example:
           /*
-           * FPS (f/s): 123.87 -> If 1 Frame took 8 milliseconds, we can divide
-           *  1000 (milliseconds in a second) / 8.07, and we get FPS.
-           * MSPerFrame (ms/f): 8.07 -> In a given frame we took 8 milliseconds.
-           * MCPF (mc/f): 25.77 -> Executed 25 Million instructions per frame.
+           * FPS (f/s): 123.87 -> If 1 Frame took 8 milliseconds, we can
+           * divide 1000 (milliseconds in a second) / 8.07, and we get FPS.
+           * MSPerFrame (ms/f): 8.07 -> In a given frame we took 8
+           * milliseconds. MCPF (mc/f): 25.77 -> Executed 25 Million
+           * instructions per frame.
            */
 #if 0
         snprintf(Buffer, 255,

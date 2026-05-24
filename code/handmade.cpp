@@ -68,7 +68,12 @@ void GameUpdateAndRender(game_memory *Memory, game_input *Input,
 
   Assert(sizeof(game_state) <= Memory->PermanentStorageSize);
   game_state *GameState = (game_state *)Memory->PermanentStorage;
-
+  debug_read_file_result FileData = DEBUGPlatformReadEntireFile(__FILE__);
+  if (FileData.Contents)
+  {
+    DEBUGPlatformWriteEntireFile("test.out", FileData.ContentsSize, FileData.Contents);
+    DEBUGPlatformFreeFileMemory(FileData.Contents);
+  }
   if (!Memory->IsInitialized)
   {
     GameState->ToneHz = 256;
