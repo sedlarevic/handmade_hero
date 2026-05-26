@@ -30,12 +30,16 @@ Assert(Expression)
 #if HANDMADE_INTERNAL
 struct debug_read_file_result
 {
-    uint32 ContentsSize;
-    void *Contents;
+  uint32 ContentsSize;
+  void *Contents;
 };
-internal_function debug_read_file_result DEBUGPlatformReadEntireFile(char *Filename);
+
+internal_function debug_read_file_result
+DEBUGPlatformReadEntireFile(char *Filename);
 internal_function void DEBUGPlatformFreeFileMemory(void *Memory);
-internal_function bool32 DEBUGPlatformWriteEntireFile(char *Filename, uint32 MemorySize, void *Memory);
+internal_function bool32 DEBUGPlatformWriteEntireFile(char *Filename,
+                                                      uint32 MemorySize,
+                                                      void *Memory);
 #endif
 
 #define Kilobytes(Value) ((Value) * 1024LL)
@@ -44,6 +48,13 @@ internal_function bool32 DEBUGPlatformWriteEntireFile(char *Filename, uint32 Mem
 #define Terabytes(Value) (Gigabytes(Value) * 1024LL)
 
 #define ArrayCount(Array) (sizeof(Array) / sizeof((Array)[0]))
+
+inline uint32 SafeTruncateUInt64(uint64 Value)
+{
+  Assert(Value <= 0xFFFFFFFF);
+  uint32 Result = (uint32)Value;
+  return (Result);
+}
 
 struct game_offscreen_buffer
 {
@@ -102,25 +113,27 @@ struct game_input
   game_controller_input Controllers[4];
 };
 
-
 struct game_memory
 {
 
-  uint64 PermanentStorageSize; // NOTE: Required to be cleared to zero at startup.
+  uint64
+      PermanentStorageSize; // NOTE: Required to be cleared to zero at startup.
   void *PermanentStorage;
   uint64 TransientStorageSize;
   void *TransientStorage;
   bool32 IsInitialized;
 };
 
-void GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffer *Buffer,
+void GameUpdateAndRender(game_memory *Memory, game_input *Input,
+                         game_offscreen_buffer *Buffer,
                          game_sound_output_buffer *SoundBuffer);
 
 //
 //
 //
 
-struct game_state {
+struct game_state
+{
   int ToneHz;
   int XOffset;
   int YOffset;
@@ -128,4 +141,3 @@ struct game_state {
 
 #define HANDMADE_H
 #endif
-

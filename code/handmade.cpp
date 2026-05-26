@@ -20,9 +20,9 @@ internal_function void RenderWeirdGradient(game_offscreen_buffer *Buffer,
     uint32 *Pixel = (uint32 *)Row;
     for (int X = 0; X < Buffer->Width; ++X)
     {
-      uint8 Red = X + XOffset;
-      uint8 Green = 0;
-      uint8 Blue = Y + YOffset;
+      uint8 Red = (uint8)(X + XOffset);
+      uint8 Green = (uint8)0;
+      uint8 Blue = (uint8)(Y + YOffset);
       *Pixel++ = ((Red << 16) | (Green << 8) | Blue);
     }
     Row += Buffer->Pitch;
@@ -71,7 +71,8 @@ void GameUpdateAndRender(game_memory *Memory, game_input *Input,
   debug_read_file_result FileData = DEBUGPlatformReadEntireFile(__FILE__);
   if (FileData.Contents)
   {
-    DEBUGPlatformWriteEntireFile("test.out", FileData.ContentsSize, FileData.Contents);
+    DEBUGPlatformWriteEntireFile("test.out", FileData.ContentsSize,
+                                 FileData.Contents);
     DEBUGPlatformFreeFileMemory(FileData.Contents);
   }
   if (!Memory->IsInitialized)
@@ -86,7 +87,7 @@ void GameUpdateAndRender(game_memory *Memory, game_input *Input,
   {
     // TODO: Use analog movement tuning
     GameState->ToneHz = 256 + (int)(128.0f * (Input0->EndY));
-    GameState->YOffset += (int)4.0f * (Input0->EndX);
+    GameState->YOffset += (int)(4.0f * (Input0->EndX));
   }
   else
   {

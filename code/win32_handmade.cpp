@@ -56,14 +56,14 @@ DEBUGPlatformReadEntireFile(char *Filename)
     LARGE_INTEGER FileSize;
     if (GetFileSizeEx(FileHandle, &FileSize))
     {
-      Result.Contents = VirtualAlloc(0, FileSize.QuadPart,
-                                     MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+      uint32 FileSize32 = SafeTruncateUInt64(FileSize.QuadPart);
+      Result.Contents =
+          VirtualAlloc(0, FileSize32, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
       if (Result.Contents)
       {
         DWORD BytesRead;
-        if (ReadFile(FileHandle, Result.Contents, FileSize.QuadPart, &BytesRead,
-                     0) &&
-            (FileSize.QuadPart == BytesRead))
+        if (ReadFile(FileHandle, Result.Contents, FileSize32, &BytesRead, 0) &&
+            (FileSize32 == BytesRead))
         {
           // NOTE: File read successfully.
           Result.ContentsSize = BytesRead;
@@ -595,9 +595,9 @@ internal_function void RenderWeirdGradient2(win32_offscreen_buffer *Buffer,
     for (int X = 0; X < Buffer->Width; X++)
     {
 
-      uint8 Red = X + XOffset;
-      uint8 Green = 0;
-      uint8 Blue = Y + YOffset;
+      uint8 Red = (uint8)(X + XOffset);
+      uint8 Green = (uint8)0;
+      uint8 Blue = (uint8)(Y + YOffset);
       *Pixel++ = ((Red << 16) | (Green << 8) | Blue);
     }
     Row += Buffer->Pitch;
@@ -667,7 +667,7 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND Window, UINT Message,
     case WM_KEYDOWN:
     case WM_KEYUP:
     {
-      uint32 VKCode = WParam;
+      uint32 VKCode = (uint32)WParam;
       bool wasDown = ((LParam & (1 << 30)) != 0);
       bool isDown = ((LParam & (1 << 31)) == 0);
       if (wasDown != isDown)
@@ -728,7 +728,7 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND Window, UINT Message,
           OutputDebugStringA("Is Down\n");
         }
       }
-      bool32 AltKeyWasDown = ((LParam & (1 << 29) != 0));
+      bool32 AltKeyWasDown = ((LParam & (1 << 29)) != 0);
       if ((VKCode == VK_F4) && AltKeyWasDown)
       {
         OutputDebugStringA("ALT + F4 CLICKED!");
@@ -845,7 +845,7 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
 #endif
       // Specifying sizes for each memory block
       GameMemory.PermanentStorageSize = Megabytes(64);
-      GameMemory.TransientStorageSize = Gigabytes(4);
+      GameMemory.TransientStorageSize = Gigabytes(1);
 
       uint64 TotalStorageSize =
           GameMemory.PermanentStorageSize + GameMemory.TransientStorageSize;
@@ -867,7 +867,7 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
        */
 
       GameMemory.PermanentStorage =
-          VirtualAlloc(BaseAddress, TotalStorageSize, MEM_RESERVE | MEM_COMMIT,
+          VirtualAlloc(BaseAddress, (size_t)TotalStorageSize, MEM_RESERVE | MEM_COMMIT,
                        PAGE_READWRITE);
       GameMemory.TransientStorage = ((uint8 *)GameMemory.PermanentStorage +
                                      GameMemory.PermanentStorageSize);
@@ -889,7 +889,6 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
         while (GlobalRunning)
         {
           MSG Message;
-          game_input Input = {};
 
           while (PeekMessage(&Message, 0, 0, 0, PM_REMOVE))
           {
@@ -904,7 +903,7 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
           DWORD dwResult;
           // Counting active controllers
 
-          int MaxControllerCount = XUSER_MAX_COUNT;
+          DWORD MaxControllerCount = XUSER_MAX_COUNT;
           if (MaxControllerCount > ArrayCount(NewInput->Controllers))
           {
             MaxControllerCount = ArrayCount(NewInput->Controllers);
@@ -1043,26 +1042,26 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
             }
 
             SoundIsValid = true;
+
+            game_sound_output_buffer SoundBuffer = {};
+            SoundBuffer.SamplesPerSecond = SoundOutput.SamplesPerSecond;
+            SoundBuffer.SampleCount = BytesToWrite / SoundOutput.BytesPerSample;
+            SoundBuffer.Samples = Samples;
+
+            game_offscreen_buffer GameOffscreenBuffer = {};
+            GameOffscreenBuffer.Memory = GlobalBackBuffer.Memory;
+            GameOffscreenBuffer.Height = GlobalBackBuffer.Height;
+            GameOffscreenBuffer.Width = GlobalBackBuffer.Width;
+            GameOffscreenBuffer.Pitch = GlobalBackBuffer.Pitch;
+            GameUpdateAndRender(&GameMemory, NewInput, &GameOffscreenBuffer,
+                                &SoundBuffer);
+
+            if (SoundIsValid)
+            {
+              Win32FillSoundBuffer(&SoundOutput, ByteToLock, BytesToWrite,
+                                   &SoundBuffer);
+            }
           }
-          game_sound_output_buffer SoundBuffer = {};
-          SoundBuffer.SamplesPerSecond = SoundOutput.SamplesPerSecond;
-          SoundBuffer.SampleCount = BytesToWrite / SoundOutput.BytesPerSample;
-          SoundBuffer.Samples = Samples;
-
-          game_offscreen_buffer GameOffscreenBuffer = {};
-          GameOffscreenBuffer.Memory = GlobalBackBuffer.Memory;
-          GameOffscreenBuffer.Height = GlobalBackBuffer.Height;
-          GameOffscreenBuffer.Width = GlobalBackBuffer.Width;
-          GameOffscreenBuffer.Pitch = GlobalBackBuffer.Pitch;
-          GameUpdateAndRender(&GameMemory, NewInput, &GameOffscreenBuffer,
-                              &SoundBuffer);
-
-          if (SoundIsValid)
-          {
-            Win32FillSoundBuffer(&SoundOutput, ByteToLock, BytesToWrite,
-                                 &SoundBuffer);
-          }
-
           win32_window_dimension Dimension = Win32GetWindowDimension(Window);
           Win32DisplayBufferInWindow(&GlobalBackBuffer, DeviceContext,
                                      Dimension.Width, Dimension.Height);
@@ -1070,6 +1069,7 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
           ++YOffset;
 
           // Metrics evaluation
+          //
           LARGE_INTEGER EndCounter;
           QueryPerformanceCounter(&EndCounter);
           int64 EndCycleCount = __rdtsc();
@@ -1084,7 +1084,6 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
           real32 MSPerFrame = 1000.0f * ((real32)CountsElapsed /
                                          (real32)CycleFrequency.QuadPart);
 
-          char Buffer[256];
           // Example:
           /*
            * FPS (f/s): 123.87 -> If 1 Frame took 8 milliseconds, we can
@@ -1093,7 +1092,9 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
            * milliseconds. MCPF (mc/f): 25.77 -> Executed 25 Million
            * instructions per frame.
            */
+
 #if 0
+        char Buffer[256];
         snprintf(Buffer, 255,
                  "FPS (f/s): %.02f\nMSPerFrame (ms/f): %.02f\nMCPF (mc/f): "
                  "%.02f\n\n",
