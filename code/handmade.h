@@ -110,7 +110,7 @@ struct game_controller_input
 
 struct game_input
 {
-  game_controller_input Controllers[4];
+  game_controller_input Controllers[5];
 };
 
 struct game_memory

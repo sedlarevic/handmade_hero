@@ -197,17 +197,6 @@ internal_function void Win32LoadXInput()
   }
 }
 
-internal_function void
-Win32ProcessXInputDigitalButton(DWORD XInputButtonState,
-                                game_button_state *OldState, DWORD ButtonBit,
-                                game_button_state *NewState)
-{
-
-  NewState->EndedDown = ((XInputButtonState & ButtonBit) == ButtonBit);
-  NewState->HalfTransitionCount =
-      (OldState->EndedDown != NewState->EndedDown) ? 1 : 0;
-}
-
 // ############ XINPUT STUFF END #############
 
 // ############ XAUDIO2 STUFF START #############
@@ -582,28 +571,6 @@ Win32FillSoundBuffer(win32_sound_output *SoundOutput, DWORD ByteToLock,
 
 // ############ DIRECTSOUND STUFF END #############
 
-
-internal_function void RenderWeirdGradient2(win32_offscreen_buffer *Buffer,
-                                            int XOffset, int YOffset)
-{
-
-  uint8 *Row = (uint8 *)Buffer->Memory;
-  for (int Y = 0; Y < Buffer->Height; Y++)
-  {
-
-    uint32 *Pixel = (uint32 *)Row;
-    for (int X = 0; X < Buffer->Width; X++)
-    {
-
-      uint8 Red = (uint8)(X + XOffset);
-      uint8 Green = (uint8)0;
-      uint8 Blue = (uint8)(Y + YOffset);
-      *Pixel++ = ((Red << 16) | (Green << 8) | Blue);
-    }
-    Row += Buffer->Pitch;
-  }
-}
-
 internal_function win32_window_dimension Win32GetWindowDimension(HWND Window)
 {
   win32_window_dimension Result;
@@ -653,6 +620,136 @@ Win32DisplayBufferInWindow(win32_offscreen_buffer *Buffer, HDC DeviceContext,
                 DIB_RGB_COLORS, SRCCOPY);
 }
 
+internal_function void
+Win32ProcessXInputDigitalButton(DWORD XInputButtonState,
+                                game_button_state *OldState, DWORD ButtonBit,
+                                game_button_state *NewState)
+{
+  NewState->EndedDown = ((XInputButtonState & ButtonBit) == ButtonBit);
+  NewState->HalfTransitionCount =
+      (OldState->EndedDown != NewState->EndedDown) ? 1 : 0;
+}
+
+internal_function void Win32ProcessKeyboardMessage(game_button_state *NewState,
+                                                   bool32 IsDown)
+{
+  NewState->EndedDown = IsDown;
+  ++NewState->HalfTransitionCount;
+}
+
+internal_function void
+Win32ProcessPendingMessages(game_controller_input *KeyboardController)
+{
+  MSG Message;
+
+  while (PeekMessage(&Message, 0, 0, 0, PM_REMOVE))
+  {
+    switch (Message.message)
+    {
+
+      case WM_QUIT:
+      {
+        GlobalRunning = false;
+      }
+      break;
+
+      case WM_SYSKEYUP:
+      case WM_SYSKEYDOWN:
+      case WM_KEYDOWN:
+      case WM_KEYUP:
+      {
+        uint32 VKCode = (uint32)Message.wParam;
+        bool WasDown = ((Message.lParam & (1 << 30)) != 0);
+        bool IsDown = ((Message.lParam & (1 << 31)) == 0);
+        if (WasDown != IsDown)
+        {
+          if (VKCode == 'W')
+          {
+            OutputDebugStringA("W\n");
+          }
+
+          else if (VKCode == 'A')
+          {
+
+            OutputDebugStringA("A\n");
+          }
+          else if (VKCode == 'S')
+          {
+
+            OutputDebugStringA("S\n");
+          }
+          else if (VKCode == 'D')
+          {
+
+            OutputDebugStringA("D\n");
+          }
+          else if (VKCode == 'Q')
+          {
+            Win32ProcessKeyboardMessage(&KeyboardController->LeftShoulder,
+                                        IsDown);
+          }
+          else if (VKCode == 'E')
+          {
+            Win32ProcessKeyboardMessage(&KeyboardController->RightShoulder,
+                                        IsDown);
+          }
+          else if (VKCode == VK_UP)
+          {
+            OutputDebugStringA("UP\n");
+            Win32ProcessKeyboardMessage(&KeyboardController->Up, IsDown);
+          }
+          else if (VKCode == VK_DOWN)
+          {
+            OutputDebugStringA("DOWN\n");
+            Win32ProcessKeyboardMessage(&KeyboardController->Down, IsDown);
+          }
+          else if (VKCode == VK_LEFT)
+          {
+            OutputDebugStringA("LEFT\n");
+            Win32ProcessKeyboardMessage(&KeyboardController->Left, IsDown);
+          }
+          else if (VKCode == VK_RIGHT)
+          {
+            OutputDebugStringA("RIGHT\n");
+            Win32ProcessKeyboardMessage(&KeyboardController->Right, IsDown);
+          }
+          else if (VKCode == VK_ESCAPE)
+          {
+            OutputDebugStringA("ESCAPE\n");
+            GlobalRunning = false;
+          }
+          else if (VKCode == VK_SPACE)
+          {
+            OutputDebugStringA("SPACE\n");
+          }
+          if (WasDown)
+          {
+            OutputDebugStringA("Was down\n");
+          }
+          if (IsDown)
+          {
+            OutputDebugStringA("Is Down\n");
+          }
+        }
+
+        bool32 AltKeyWasDown = ((Message.lParam & (1 << 29)) != 0);
+        if ((VKCode == VK_F4) && AltKeyWasDown)
+        {
+          OutputDebugStringA("ALT + F4 CLICKED!");
+          GlobalRunning = false;
+        }
+      }
+      break;
+
+      default:
+      {
+        TranslateMessage(&Message);
+        DispatchMessageA(&Message);
+      }
+    }
+  }
+}
+
 LRESULT CALLBACK Win32MainWindowCallback(HWND Window, UINT Message,
                                          WPARAM WParam, LPARAM LParam)
 {
@@ -662,80 +759,21 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND Window, UINT Message,
   switch (Message)
   {
 
-    case WM_SYSKEYUP:
-    case WM_SYSKEYDOWN:
-    case WM_KEYDOWN:
-    case WM_KEYUP:
+    case WM_ACTIVATEAPP:
     {
-      uint32 VKCode = (uint32)WParam;
-      bool wasDown = ((LParam & (1 << 30)) != 0);
-      bool isDown = ((LParam & (1 << 31)) == 0);
-      if (wasDown != isDown)
-      {
-        if (VKCode == 'W')
-        {
-          OutputDebugStringA("W\n");
-        }
-
-        else if (VKCode == 'A')
-        {
-
-          OutputDebugStringA("A\n");
-        }
-        else if (VKCode == 'S')
-        {
-
-          OutputDebugStringA("S\n");
-        }
-        else if (VKCode == 'D')
-        {
-
-          OutputDebugStringA("D\n");
-        }
-        else if (VKCode == VK_UP)
-        {
-          OutputDebugStringA("UP\n");
-        }
-        else if (VKCode == VK_DOWN)
-        {
-
-          OutputDebugStringA("DOWN\n");
-        }
-        else if (VKCode == VK_LEFT)
-        {
-
-          OutputDebugStringA("LEFT\n");
-        }
-        else if (VKCode == VK_RIGHT)
-        {
-
-          OutputDebugStringA("RIGHT\n");
-        }
-        else if (VKCode == VK_ESCAPE)
-        {
-          OutputDebugStringA("ESCAPE\n");
-        }
-        else if (VKCode == VK_SPACE)
-        {
-          OutputDebugStringA("SPACE\n");
-        }
-        if (wasDown)
-        {
-          OutputDebugStringA("Was down\n");
-        }
-        if (isDown)
-        {
-          OutputDebugStringA("Is Down\n");
-        }
-      }
-      bool32 AltKeyWasDown = ((LParam & (1 << 29)) != 0);
-      if ((VKCode == VK_F4) && AltKeyWasDown)
-      {
-        OutputDebugStringA("ALT + F4 CLICKED!");
-        GlobalRunning = false;
-      }
+      OutputDebugStringA("WM_ACTIVATEAPP\n");
     }
     break;
+
+    case WM_SYSKEYUP:
+    case WM_SYSKEYDOWN:
+    case WM_KEYUP:
+    case WM_KEYDOWN:
+    {
+      Assert(!"Keyboard input came in through a non-dispatch message!");
+    }
+    break;
+
 
     case WM_PAINT:
     {
@@ -750,11 +788,6 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND Window, UINT Message,
     }
     break;
 
-    case WM_ACTIVATEAPP:
-    {
-      OutputDebugStringA("WM_ACTIVATEAPP\n");
-    }
-    break;
 
     case WM_DESTROY:
     {
@@ -771,7 +804,6 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND Window, UINT Message,
       GlobalRunning = false;
     }
     break;
-
 
     default:
     {
@@ -867,8 +899,8 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
        */
 
       GameMemory.PermanentStorage =
-          VirtualAlloc(BaseAddress, (size_t)TotalStorageSize, MEM_RESERVE | MEM_COMMIT,
-                       PAGE_READWRITE);
+          VirtualAlloc(BaseAddress, (size_t)TotalStorageSize,
+                       MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
       GameMemory.TransientStorage = ((uint8 *)GameMemory.PermanentStorage +
                                      GameMemory.PermanentStorageSize);
 
@@ -888,17 +920,11 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
         uint64 LastCycleCount = __rdtsc();
         while (GlobalRunning)
         {
-          MSG Message;
+          game_controller_input *KeyboardController = &NewInput->Controllers[0];
+          game_controller_input ZeroController = {};
+          *KeyboardController = ZeroController;
 
-          while (PeekMessage(&Message, 0, 0, 0, PM_REMOVE))
-          {
-            if (Message.message == WM_QUIT)
-            {
-              GlobalRunning = false;
-            }
-            TranslateMessage(&Message);
-            DispatchMessageA(&Message);
-          }
+          Win32ProcessPendingMessages(KeyboardController);
 
           DWORD dwResult;
           // Counting active controllers

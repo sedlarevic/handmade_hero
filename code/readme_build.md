@@ -1,5 +1,0 @@
--DHANDMADE_WIN32=1: compile-time define, identical to #define HANDMADE_WIN32 1 inside the code.
--DHANDMADE_SLOW=1: compile-time define, identical to #define HANDMADE_SLOW 1 inside the code.
--DHANDMADE_INTERNAL=1: compile-time define, identical to #define HANDMADE_INTERNAL 1 inside the code.
--FC: Produce the full path of the source code file when printing errors, notes, and other diagnostic messages.
--Zi: Produce debug information (allows us to step into the code).
