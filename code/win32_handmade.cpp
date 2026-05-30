@@ -630,6 +630,24 @@ Win32ProcessXInputDigitalButton(DWORD XInputButtonState,
       (OldState->EndedDown != NewState->EndedDown) ? 1 : 0;
 }
 
+internal_function real32 Win32ProcessXInputStickValue(SHORT Value,
+                                                      SHORT DeadZoneThreshold)
+{
+  real32 Result = 0;
+  if (Value < -DeadZoneThreshold)
+  {
+    Result =
+        (real32)((Value + DeadZoneThreshold) / (32768.0f - DeadZoneThreshold));
+  }
+  else if (Value > DeadZoneThreshold)
+  {
+    Result =
+        (real32)((Value - DeadZoneThreshold) / (32767.0f - DeadZoneThreshold));
+  }
+
+  return (Result);
+}
+
 internal_function void Win32ProcessKeyboardMessage(game_button_state *NewState,
                                                    bool32 IsDown)
 {
@@ -966,29 +984,11 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
               NewController->StartX = OldController->EndX;
               NewController->StartY = OldController->EndY;
 
-              real32 X;
-              if (Gamepad->sThumbLX < 0)
-              {
-                X = (real32)Gamepad->sThumbLX / -32768.0f;
-              }
-              else
-              {
-                X = (real32)Gamepad->sThumbLX / 32767.0f;
-              }
-              NewController->MinX = OldController->MaxX = NewController->EndX =
-                  X;
 
-              real32 Y;
-              if (Gamepad->sThumbLY < 0)
-              {
-                Y = (real32)Gamepad->sThumbLY / 32768.0f;
-              }
-              else
-              {
-                Y = (real32)Gamepad->sThumbLY / 32767.0f;
-              }
-              NewController->MinY = OldController->MaxY = NewController->EndY =
-                  Y;
+              real32 X = Win32ProcessXInputStickValue(
+                  Gamepad->sThumbLX, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
+              real32 Y = Win32ProcessXInputStickValue(
+                  Gamepad->sThumbLY, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE);
 
               Win32ProcessXInputDigitalButton(
                   Gamepad->wButtons, &OldController->Down, XINPUT_GAMEPAD_A,
@@ -1145,6 +1145,7 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance,
       // TODO: LOG: Window creation failed.
     }
   }
+
   else
   {
     // TODO: LOG: Registration of window class failed.
