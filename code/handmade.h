@@ -2,7 +2,9 @@
  * layer should be able to perform on behalf of the cross-platform code. We will
  * basically create our own platform instruction API in this header file, and
  * all of our platform non-specific code will call into it this way.*/
+#if !defined(HANDMADE_H)
 
+#include "handmade_types.h"
 /*
  * NOTE:
  * HANDMADE_INTERNAL:
@@ -24,7 +26,7 @@
     *(int *)0 = 0;                                                             \
   }
 #else
-Assert(Expression)
+#define Assert(Expression)
 #endif
 
 #if HANDMADE_INTERNAL
@@ -150,4 +152,5 @@ struct game_state
 };
 
 #define HANDMADE_H
+#endif
 #endif
